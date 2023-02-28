@@ -1,51 +1,38 @@
 import Foundation
+import ArgumentParser
 
 @main
-public struct proj_info {
-    public static func main() {
-        let arguments = CommandLine.arguments
-        guard let scanDirIndex = arguments.firstIndex(of: "--scan-dir") else {
-            fatalError("--scan-dir /path/to/scan argument is required")
-        }
-        guard let scanDirPath = arguments[safe: scanDirIndex + 1],
-              !scanDirPath.isEmpty else {
-            fatalError("missing value for --scan-dir argument")
-        }
-        let showLinesOfCodes: Bool = arguments.contains("--show-locs")
-        let outputPath: String? = {
-            guard let outputDirIndex = arguments.firstIndex(of: "--output-path") else {
+struct proj_info: ParsableCommand {
+    @Argument(help: "The directory to scan for swift files")
+    var scanDir: String
+    
+    @Flag(name: .customLong("show-locs"), help: "Display lines of codes within the directory to scan")
+    var showLinesOfCodes: Bool = false
+    
+    @Option(name: .long, help: "Output path where to store info in a JSON file")
+    var outputPath: String?
+    
+    mutating func run() throws {
+        let swiftFiles = try Self.getSwiftFiles(atPath: scanDir)
+        let swiftLocs: Int? =  {
+            guard showLinesOfCodes else {
                 return nil
             }
-            guard let outputDirPath = arguments[safe: outputDirIndex + 1],
-                  !outputDirPath.isEmpty else {
-                fatalError("provided argument --output-path missing value")
+            let filePaths = swiftFiles.map { fileName in
+                "\(scanDir)/\(fileName)"
             }
-            return outputDirPath
+            return Self.getLinesOfCode(filePaths)
         }()
-        do {
-            let swiftFiles = try getSwiftFiles(atPath: scanDirPath)
-            let swiftLocs: Int? =  {
-                guard showLinesOfCodes else {
-                    return nil
-                }
-                let filePaths = swiftFiles.map { fileName in
-                    "\(scanDirPath)/\(fileName)"
-                }
-                return Self.getLinesOfCode(filePaths)
-            }()
-            if let outputPath = outputPath {
-                try Self.saveInfo(scanDirPath,
-                                  swiftFilesCount: swiftFiles.count,
-                                  linesOfCode: swiftLocs,
-                                  outputPath: outputPath)
-            } else {
-                print("Number of Swift Files \(swiftFiles.count)")
-                if let swiftLocs = swiftLocs {
-                    print("Number of Swift Lines of Codes \(swiftLocs)")
-                }
+        if let outputPath = outputPath {
+            try Self.saveInfo(scanDir,
+                              swiftFilesCount: swiftFiles.count,
+                              linesOfCode: swiftLocs,
+                              outputPath: outputPath)
+        } else {
+            print("Number of Swift Files \(swiftFiles.count)")
+            if let swiftLocs = swiftLocs {
+                print("Number of Swift Lines of Codes \(swiftLocs)")
             }
-        } catch {
-            print("error \(error)")
         }
     }
     
